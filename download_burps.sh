@@ -1,4 +1,7 @@
 #!/bin/bash
+# Usage TWITCH_TOKEN=<token> ./download_burps.sh
+# Will download and run clip-burps on all vods chats for which can be found in ./chats/
+
 VIDEO_QUALITY=160p
 
 if [ ! -d chats/parsed ]; then
