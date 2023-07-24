@@ -1,5 +1,7 @@
 .vscode
 burps/*
 burps-audio/*
+not-burps/*
+not-burps-audio/*
 vods/*
 chats/*
