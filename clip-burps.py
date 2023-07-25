@@ -104,7 +104,7 @@ for i in range(4 * len(end_times)):
         end_time = random.randint(clip_length, video_end_time)
         start_time = end_time - clip_length
         for burp in burps:
-            (burp_start_time, burp_end_time) = burp
+            (burp_start_time, burp_end_time, _) = burp
             if (start_time >= burp_start_time and start_time <= burp_end_time) or (end_time >= burp_start_time and end_time <= burp_end_time):
                 continue
         break
