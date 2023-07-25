@@ -45,7 +45,7 @@ def clip_burp(end_time_seconds):
     burp_time_seconds = time[burp_sample]
 
     clip_length = 4.0
-    before_time_seconds = random.uniform(0, clip_length)
+    before_time_seconds = random.uniform(0.5, clip_length - 0.5)
     before_burp_time_seconds = burp_time_seconds - before_time_seconds
     after_burp_time_seconds = burp_time_seconds + \
         (clip_length - before_time_seconds)
