@@ -6,3 +6,4 @@ not-burps-audio/*
 vods/*
 chats/*
 model.pt
+blacklist.txt
