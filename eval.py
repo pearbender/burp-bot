@@ -7,6 +7,7 @@ import random
 import torch.nn.functional as F
 from torch.nn import init
 from torch import nn
+import shutil
 
 from model import *
 
@@ -28,14 +29,19 @@ def prepare_file(audio_file):
 def get_prediction(audio_file):
     inputs = prepare_file(audio_file)
     
-    inputs_m, inputs_s = inputs.mean(), inputs.std()
-    inputs = (inputs - inputs_m) / inputs_s
+    #inputs_m, inputs_s = inputs.mean(), inputs.std()
+    #inputs = (inputs - inputs_m) / inputs_s
     
     output = model.forward(inputs)
 
     conf, classes = torch.max(output, 1)
 
     return conf.item(), classes.item()
+
+
+def is_burp(audio_file):
+    _, burp = get_prediction(audio_file)
+    return burp == 0
 
 
 burps_folder_path = "./burps-audio"
@@ -46,10 +52,34 @@ burps_folder_path = "./not-burps-audio"
 not_burps_files = [os.path.join(burps_folder_path, file) for file in os.listdir(
     burps_folder_path) if file.lower().endswith(".wav")]
 
+
+if os.path.exists('./eval-temp'):
+    shutil.rmtree('./eval-temp')
+
+os.makedirs('./eval-temp/false-positives')
+os.makedirs('./eval-temp/false-negatives')
+
+
+print('finding false-negatives...')
+for burp in burps_files:
+    if not is_burp(burp):
+        print(burp)
+        shutil.copy(burp, './eval-temp/false-negatives')
+
+
+print('finding false-positives...')
+for burp in not_burps_files:
+    if is_burp(burp):
+        print(burp)
+        shutil.copy(burp, './eval-temp/false-positives')
+
+
 print("burps")
 for i in range(10):
-    print(get_prediction(random.choice(burps_files)))
+    file = random.choice(burps_files)
+    print(f"{file} {get_prediction(file)}")
 
 print("\n\n\nnon burps")
 for i in range(10):
-    print(get_prediction(random.choice(not_burps_files)))
+    file = random.choice(not_burps_files)
+    print(f"{file} {get_prediction(file)}")

@@ -99,7 +99,7 @@ for burp in burps:
     (burp_start_time, burp_end_time, original) = burp
     clip_video("burps", burp_start_time, burp_end_time, original)
 
-for i in range(4 * len(end_times)):
+for i in range(8 * len(end_times)):
     while True:
         end_time = random.randint(clip_length, video_end_time)
         start_time = end_time - clip_length

@@ -2,6 +2,8 @@
 
 import asyncio
 from twitchio.ext import commands
+from twitchrealtimehandler import TwitchAudioGrabber
+import numpy as np
 
 
 class Bot(commands.Bot):
@@ -54,6 +56,17 @@ class Bot(commands.Bot):
 
 
 async def run_task(bot: Bot):
+    audio_grabber = TwitchAudioGrabber(
+        twitch_url="https://www.twitch.tv/perokichi_neet",
+        blocking=True,  # wait until a segment is available
+        segment_length=2,  # segment length in seconds
+        rate=44100,  # sampling rate of the audio
+        channels=2,  # number of channels
+        dtype=np.int16  # quality of the audio could be [np.int16, np.int32, np.float32, np.float64]
+        )
+
+    audio_segment = audio_grabber.grab()
+
     while True:
         if len(bot.connected_channels) <= 0:
             print("No channels connected")

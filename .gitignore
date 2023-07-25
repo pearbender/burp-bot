@@ -1,9 +1,14 @@
 .vscode
+__pycache__
 burps/*
 burps-audio/*
 not-burps/*
 not-burps-audio/*
 vods/*
 chats/*
+non-burps
+burp-find-temp
+burp-found-temp
+eval-temp
 model.pt
 blacklist.txt

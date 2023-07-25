@@ -37,7 +37,7 @@ class SoundDS(Dataset):
         return spec, class_id
 
 
-def training(model, train_dl, num_epochs):
+def training(model, train_dl, num_epochs, val_dl):
     # Loss Function, Optimizer and Scheduler
     criterion = nn.CrossEntropyLoss()
     optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
@@ -53,14 +53,19 @@ def training(model, train_dl, num_epochs):
         correct_prediction = 0
         total_prediction = 0
 
+        correct_true_prediction = 0
+        correct_false_prediction = 0
+        total_true_prediction = 0
+        total_false_prediction = 0
+
         # Repeat for each batch in the training set
         for i, data in enumerate(train_dl):
             # Get the input features and target labels, and put them on the GPU
             inputs, labels = data[0].to(device), data[1].to(device)
 
             # Normalize the inputs
-            inputs_m, inputs_s = inputs.mean(), inputs.std()
-            inputs = (inputs - inputs_m) / inputs_s
+            #inputs_m, inputs_s = inputs.mean(), inputs.std()
+            #inputs = (inputs - inputs_m) / inputs_s
 
             # Zero the parameter gradients
             optimizer.zero_grad()
@@ -81,6 +86,11 @@ def training(model, train_dl, num_epochs):
             correct_prediction += (prediction == labels).sum().item()
             total_prediction += prediction.shape[0]
 
+            correct_true_prediction += ((prediction == labels) & (prediction == 0)).sum().item()
+            correct_false_prediction += ((prediction == labels) & (prediction == 1)).sum().item()
+            total_true_prediction += (labels == 0).sum().item()
+            total_false_prediction += (labels == 1).sum().item()
+
             # if i % 10 == 0:    # print every 10 mini-batches
             #    print('[%d, %5d] loss: %.3f' % (epoch + 1, i + 1, running_loss / 10))
 
@@ -88,14 +98,27 @@ def training(model, train_dl, num_epochs):
         num_batches = len(train_dl)
         avg_loss = running_loss / num_batches
         acc = correct_prediction/total_prediction
-        print(f'Epoch: {epoch}, Loss: {avg_loss:.2f}, Accuracy: {acc:.2f}')
+        acc_true = correct_true_prediction/total_true_prediction
+        acc_false = correct_false_prediction/total_false_prediction
+        print(f'Epoch: {epoch}, '
+              f'Loss: {avg_loss:.4f}, '
+              f'Accuracy: {acc:.4f} '
+              f'[True: {correct_true_prediction}/{total_true_prediction} {acc_true:.4f}, '
+              f'False: {correct_false_prediction}/{total_false_prediction} {acc_false:.4f}]')
+
+        if epoch % 5 == 0:
+            print('Validation')
+            inference(model, val_dl)
+
 
     print('Finished Training')
 
 
 def inference(model, val_dl):
-    correct_prediction = 0
-    total_prediction = 0
+    correct_true_prediction = 0
+    correct_false_prediction = 0
+    total_true_prediction = 0
+    total_false_prediction = 0
 
     # Disable gradient updates
     with torch.no_grad():
@@ -104,8 +127,8 @@ def inference(model, val_dl):
             inputs, labels = data[0].to(device), data[1].to(device)
 
             # Normalize the inputs
-            inputs_m, inputs_s = inputs.mean(), inputs.std()
-            inputs = (inputs - inputs_m) / inputs_s
+            #inputs_m, inputs_s = inputs.mean(), inputs.std()
+            #inputs = (inputs - inputs_m) / inputs_s
 
             # Get predictions
             outputs = model(inputs)
@@ -113,11 +136,18 @@ def inference(model, val_dl):
             # Get the predicted class with the highest score
             _, prediction = torch.max(outputs, 1)
             # Count of predictions that matched the target label
-            correct_prediction += (prediction == labels).sum().item()
-            total_prediction += prediction.shape[0]
+            correct_true_prediction += ((prediction == labels) & (prediction == 0)).sum().item()
+            correct_false_prediction += ((prediction == labels) & (prediction == 1)).sum().item()
+            total_true_prediction += (labels == 0).sum().item()
+            total_false_prediction += (labels == 1).sum().item()
 
-    acc = correct_prediction/total_prediction
-    print(f'Accuracy: {acc:.2f}, Total items: {total_prediction}')
+    acc = (correct_true_prediction + correct_false_prediction) / (total_true_prediction + total_false_prediction)
+    acc_true = correct_true_prediction/total_true_prediction
+    acc_false = correct_false_prediction/total_false_prediction
+    print(f'Accuracy: {acc:.4f} '
+          f'[True: {correct_true_prediction}/{total_true_prediction} {acc_true:.4f}, '
+          f'False: {correct_false_prediction}/{total_false_prediction} {acc_false:.4f}] '
+          f'Total items: {total_true_prediction + total_false_prediction}')
 
 
 burps_folder_path = "./burps-audio"
@@ -135,8 +165,8 @@ num_val = num_items - num_train
 train_ds, val_ds = random_split(myds, [num_train, num_val])
 
 # Create training and validation data loaders
-train_dl = torch.utils.data.DataLoader(train_ds, batch_size=16, shuffle=True)
-val_dl = torch.utils.data.DataLoader(val_ds, batch_size=16, shuffle=False)
+train_dl = torch.utils.data.DataLoader(train_ds, batch_size=64, shuffle=True)
+val_dl = torch.utils.data.DataLoader(val_ds, batch_size=64, shuffle=False)
 
 # Create the model and put it on the GPU if available
 myModel = AudioClassifier()
@@ -145,8 +175,8 @@ myModel = myModel.to(device)
 # Check that it is on Cuda
 next(myModel.parameters()).device
 
-num_epochs = 50   # Just for demo, adjust this higher.
-training(myModel, train_dl, num_epochs)
+num_epochs = 60  # Just for demo, adjust this higher.
+training(myModel, train_dl, num_epochs, val_dl)
 print('Done')
 
 # Run inference on trained model with the validation set

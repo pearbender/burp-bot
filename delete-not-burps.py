@@ -11,10 +11,10 @@ if __name__ == "__main__":
                 blacklist[vod] = []
             blacklist[vod].append(seconds)
 
-    for filename in os.listdir("burps"):
-        if not filename.endswith(".mp4"):
+    for filename in os.listdir("burps-audio"):
+        if not filename.endswith(".wav"):
             continue
-
+        
         parts = filename.split("_")
         vod = parts[0]
         seconds = int(parts[1])
@@ -24,6 +24,6 @@ if __name__ == "__main__":
 
         for s in blacklist[vod]:
             if abs(s - seconds) <= 4:
-                file_path = os.path.join("burps", filename)
+                file_path = os.path.join("burps-audio", filename)
                 os.remove(file_path)
                 print(f"Deleted: {file_path}")
