@@ -14,7 +14,7 @@ class SoundDS(Dataset):
     def __init__(self, burps_files, not_burps_files):
         self.burps_files = burps_files
         self.not_burps_files = not_burps_files
-        self.duration = 30000
+        self.duration = 4000
         self.sr = 44100
         self.channel = 2
 
@@ -145,7 +145,7 @@ myModel = myModel.to(device)
 # Check that it is on Cuda
 next(myModel.parameters()).device
 
-num_epochs = 2   # Just for demo, adjust this higher.
+num_epochs = 50   # Just for demo, adjust this higher.
 training(myModel, train_dl, num_epochs)
 print('Done')
 
