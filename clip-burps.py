@@ -3,6 +3,7 @@ import csv
 import sys
 import os
 from moviepy.video.io.VideoFileClip import VideoFileClip
+from moviepy.audio.fx.all import volumex
 import numpy as np
 import scipy.io.wavfile as wavfile
 from io import BytesIO
@@ -22,7 +23,7 @@ def convert_seconds_to_hhmmss(seconds):
     return f"{hh:02d}:{mm:02d}:{ss:02d}"
 
 
-def clip_burp(end_time_seconds):
+def clip_burp(end_time_seconds, original):
     start_time_seconds = max(0, end_time_seconds - 15)
     start_time = convert_seconds_to_hhmmss(start_time_seconds)
     end_time = convert_seconds_to_hhmmss(end_time_seconds)
@@ -49,12 +50,19 @@ def clip_burp(end_time_seconds):
     before_burp_time_seconds = burp_time_seconds - before_time_seconds
     after_burp_time_seconds = burp_time_seconds + \
         (clip_length - before_time_seconds)
-    return (before_burp_time_seconds, after_burp_time_seconds)
+    return (before_burp_time_seconds, after_burp_time_seconds, original)
 
 
-def clip_video(dir, start_time, end_time):
+def clip_video(dir, start_time, end_time, original):
     clip = VideoFileClip(vod_file_path).subclip(start_time, end_time)
-    output_path = f"{dir}/{name}_{str(int(start_time))}.mp4"
+    suffix = round(start_time, 2)
+    suffix = "{:.2f}".format(suffix)
+    suffix = suffix.replace(".", "_")
+    if not original:
+        volume_factor = random.uniform(0.5, 2.0)
+        clip = clip.fx(volumex, volume_factor)
+        suffix += "_dummy"
+    output_path = f"{dir}/{name}_{suffix}.mp4"
     print(f"Writing {output_path}")
     clip.write_videofile(output_path, codec="libx264", audio_codec="aac")
     clip.close()
@@ -82,11 +90,14 @@ random.seed(42)
 
 burps = []
 for end_time in end_times:
-    burps.append(clip_burp(end_time))
+    burps.append(clip_burp(end_time, True))
+    burps.append(clip_burp(end_time, False))
+    burps.append(clip_burp(end_time, False))
+    burps.append(clip_burp(end_time, False))
 
 for burp in burps:
-    (burp_start_time, burp_end_time) = burp
-    clip_video("burps", burp_start_time, burp_end_time)
+    (burp_start_time, burp_end_time, original) = burp
+    clip_video("burps", burp_start_time, burp_end_time, original)
 
 for i in range(4 * len(end_times)):
     while True:
@@ -97,4 +108,4 @@ for i in range(4 * len(end_times)):
             if (start_time >= burp_start_time and start_time <= burp_end_time) or (end_time >= burp_start_time and end_time <= burp_end_time):
                 continue
         break
-    clip_video("not-burps", start_time, end_time)
+    clip_video("not-burps", start_time, end_time, True)
