@@ -14,6 +14,9 @@ import shutil
 import argparse
 import math
 
+from tqdm import tqdm
+from tqdm import trange
+
 from model import *
 
 
@@ -23,6 +26,8 @@ model.eval()
 
 
 SLICE_OVERLAP = 4
+
+MAX_FULL_SLICES_PER_CHUNK = 1000
 
 
 def prepare_file(audio_file):
@@ -58,12 +63,13 @@ def get_template_size(template_file):
 
 
 def get_cuts(audio, size):
-    for i in range(0, audio[0].size - (size * (SLICE_OVERLAP - 1) // SLICE_OVERLAP), size // SLICE_OVERLAP):
+    for i in trange(0, audio[0].size - (size * (SLICE_OVERLAP - 1) // SLICE_OVERLAP), size // SLICE_OVERLAP, 
+                    unit='slices', desc='Current chunk', dynamic_ncols=True, leave=False):
         yield np.array([audio[0][i : i + size], audio[1][i : i + size]])
 
 
 def load_file_chunks(audio_file, sr, size):
-    max_slices = 1000
+    max_slices = MAX_FULL_SLICES_PER_CHUNK
     max_samples = size * max_slices
     max_duration = max_samples / sr
 
@@ -74,43 +80,36 @@ def load_file_chunks(audio_file, sr, size):
         yield data
         return
 
-    print(f"File too big, loading in {math.ceil(duration / max_duration)} x {max_duration}s pieces")
+    tqdm.write(f"File too big, loading in {math.ceil(duration / max_duration)} x {max_duration}s chunks")
 
-    for i in range(0, int(duration * sr), max_samples + 1):
-        print("\nLoading next piece...")
+    for i in trange(0, int(duration * sr), max_samples + 1, 
+                    position=1, unit='chunks', desc='Current file', dynamic_ncols=True, leave=False):
+        tqdm.write("Loading next chunk...")
         data, _ = librosa.load(audio_file, sr=sr, mono=False, offset=i / sr, duration=max_duration)
         yield data
 
 
-def cut_audio(audio_file, size, sr):
+def cut_audio(audio_file, size, sr, output):
     source, _ = os.path.splitext(os.path.basename(audio_file))
-
-    if os.path.exists('./burp-find-temp'):
-        shutil.rmtree('./burp-find-temp')
-
-    if os.path.exists('./burp-found-temp'):
-        shutil.rmtree('./burp-found-temp')
-
-    os.makedirs('./burp-find-temp')
-    os.makedirs('./burp-found-temp')
 
     current_slice = 0
     prev_slice_burp = False
+
     for chunk in load_file_chunks(audio_file, sr, size):
         for cut in get_cuts(chunk, size):
-            if current_slice % 500 == 0:
-                print(f"Processing slice {current_slice}...")
+            # if current_slice % 500 == 0:
+            #     tqdm.write(f"Processing slice {current_slice}...")
             
             single_slice_file = f'./burp-find-temp/{source}_slice_{current_slice}_from_{int(current_slice * (size // SLICE_OVERLAP) / sr)}.wav'
             sf.write(single_slice_file, cut.T, sr)
             
             if is_burp(single_slice_file):
                 if prev_slice_burp:
-                    print(f"Burp found!! +++")
+                    tqdm.write(f"Burp found!! +++")
                 else:
-                    print(f"Burp found!! {current_slice}")
+                    tqdm.write(f"Burp found!! {current_slice}")
                 prev_slice_burp = True
-                shutil.copy(single_slice_file, './burp-found-temp/')
+                shutil.copy(single_slice_file, output)
             else:
                 prev_slice_burp = False
 
@@ -119,12 +118,31 @@ def cut_audio(audio_file, size, sr):
 
 
 parser = argparse.ArgumentParser("burp-finder")
-parser.add_argument("template", help="Template file for length detection", type=str)
-parser.add_argument("file", help="Audio file to parse", type=str)
+parser.add_argument("-t", "--template", help="Template file for length detection", type=str, required=True)
+parser.add_argument("-o", "--output", help="Directory to store the outputs", type=str, default='./burp-found-temp')
+parser.add_argument("files", help="Audio files to parse", type=str, nargs='+')
 args = parser.parse_args()
 
 cut_size, cut_sr = get_template_size(args.template)
 
 print(f"Template size: {cut_size} samples, at rate {cut_sr}")
 
-cut_audio(args.file, cut_size, cut_sr)
+if os.path.exists('./burp-find-temp'):
+    shutil.rmtree('./burp-find-temp')
+
+if os.path.exists(args.output):
+    shutil.rmtree(args.output)
+
+os.makedirs('./burp-find-temp')
+os.makedirs(args.output)
+
+print(f"\nPrepairing to parse {len(args.files)} files:")
+
+for file in args.files:
+    print(file)
+
+for file in tqdm(args.files, unit='files', position=2, desc='Total files', dynamic_ncols=True, leave=False):
+    tqdm.write(f"\n========================================\nParsing file {file}")
+    cut_audio(file, cut_size, cut_sr, args.output)
+
+print(f"Done")

@@ -60,26 +60,55 @@ os.makedirs('./eval-temp/false-positives')
 os.makedirs('./eval-temp/false-negatives')
 
 
+true_positives = 0
+true_negatives = 0
+
+false_positives = 0
+false_negatives = 0
+
+
 print('finding false-negatives...')
 for burp in burps_files:
     if not is_burp(burp):
+        false_negatives += 1
         print(burp)
         shutil.copy(burp, './eval-temp/false-negatives')
+    else:
+        true_positives += 1
 
 
 print('finding false-positives...')
 for burp in not_burps_files:
     if is_burp(burp):
+        false_positives += 1
         print(burp)
         shutil.copy(burp, './eval-temp/false-positives')
+    else:
+        true_negatives += 1
 
 
-print("burps")
-for i in range(10):
-    file = random.choice(burps_files)
-    print(f"{file} {get_prediction(file)}")
+total_positives = true_positives + false_negatives
+total_negatives = false_positives + true_negatives
 
-print("\n\n\nnon burps")
-for i in range(10):
-    file = random.choice(not_burps_files)
-    print(f"{file} {get_prediction(file)}")
+total_true = true_positives + true_negatives
+total_false = false_positives + false_negatives
+
+
+def print_stat(message: str, value, total, length=45):
+    print(f"{message: <{length}} {value / total: >9.4%} ( {(total - value) / total: >9.4%} wrong) {value: >5} / {total: <5} {total - value} wrong")
+
+
+acc_total = total_true / (total_true + total_false) * 100
+acc_negatives = true_negatives / total_negatives * 100
+acc_positives = true_positives / total_positives * 100
+acc_selected_positives = true_positives / (true_positives + false_positives) * 100
+
+
+print(f"\n\nTotal data {total_positives + total_negatives} clips")
+print(f"Total burps {total_positives}")
+print(f"Total non-burps {total_negatives}")
+
+print_stat('Total accuracy', total_true, total_true + total_false)
+print_stat('Percent of burps detected', true_positives, total_positives)
+print_stat('Percent of non-burps detected', true_negatives, total_negatives)
+print_stat('Percent of detections being actually burps', true_positives, true_positives + false_positives)

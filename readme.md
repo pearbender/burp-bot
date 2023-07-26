@@ -42,6 +42,13 @@ python3 train.py
 ```
 The resulting model will be saved as `model.pt`. If `model.pt` exists already, **it will be overwritten**.
 
+## Getting the model evaluation statistics
+
+It is possible to run the model over all the data to get more complete statistics, run:
+```
+python eval.py
+```
+
 # Using the model
 
 There are several ways to use the model once it's trained. All the scripts expect the model to exist and be names `model.pt`.
@@ -63,7 +70,15 @@ To find the burps, there are several steps:
 
 3. Running the script. Once you have a template and an audio file ready, you can start burp detection with:
     ```
-    python find-burps-with-net.py burps-audio/<template-file>.wav <audio-file-name>.flac
+    python find-burps-with-net.py --template burps-audio/<template-file>.wav <audio-file-name>.flac
+    ```
+    Multiple audio files can be passed to the script to detect all burps in all of them:
+    ```
+    python find-burps-with-net.py -t bot/template.wav file1.flac file2.flac
+    ```
+    Bash wildcards are thus also supported:
+    ```
+    python find-burps-with-net.py -t bot/template.wav *.flac
     ```
 
 The script will create two directories: 
