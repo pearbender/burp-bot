@@ -10,5 +10,8 @@ non-burps
 burp-find-temp
 burp-found-temp
 eval-temp
-model.pt
+*.pt
+*.wav
+*.flac
+*.mkv
 blacklist.txt

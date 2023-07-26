@@ -22,7 +22,7 @@ model.load_state_dict(torch.load("./model.pt"))
 model.eval()
 
 
-slice_overlap = 4
+SLICE_OVERLAP = 4
 
 
 def prepare_file(audio_file):
@@ -58,7 +58,7 @@ def get_template_size(template_file):
 
 
 def get_cuts(audio, size):
-    for i in range(0, audio[0].size - (size * (slice_overlap - 1) // slice_overlap), size // slice_overlap):
+    for i in range(0, audio[0].size - (size * (SLICE_OVERLAP - 1) // SLICE_OVERLAP), size // SLICE_OVERLAP):
         yield np.array([audio[0][i : i + size], audio[1][i : i + size]])
 
 
@@ -101,7 +101,7 @@ def cut_audio(audio_file, size, sr):
             if current_slice % 500 == 0:
                 print(f"Processing slice {current_slice}...")
             
-            single_slice_file = f'./burp-find-temp/{source}_slice_{current_slice}_from_{int(current_slice * (size // slice_overlap) / sr)}.wav'
+            single_slice_file = f'./burp-find-temp/{source}_slice_{current_slice}_from_{int(current_slice * (size // SLICE_OVERLAP) / sr)}.wav'
             sf.write(single_slice_file, cut.T, sr)
             
             if is_burp(single_slice_file):

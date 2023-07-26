@@ -10,6 +10,11 @@ from torch import nn
 from model import *
 
 
+BATCH_SIZE = 64
+EPOCHS = 70
+TRAINING_VALIDATION_SPLIT = 0.9
+
+
 class SoundDS(Dataset):
     def __init__(self, burps_files, not_burps_files):
         self.burps_files = burps_files
@@ -160,13 +165,13 @@ not_burps_files = [os.path.join(burps_folder_path, file) for file in os.listdir(
 
 myds = SoundDS(burps_files, not_burps_files)
 num_items = len(myds)
-num_train = round(num_items * 0.8)
+num_train = round(num_items * TRAINING_VALIDATION_SPLIT)
 num_val = num_items - num_train
 train_ds, val_ds = random_split(myds, [num_train, num_val])
 
 # Create training and validation data loaders
-train_dl = torch.utils.data.DataLoader(train_ds, batch_size=64, shuffle=True)
-val_dl = torch.utils.data.DataLoader(val_ds, batch_size=64, shuffle=False)
+train_dl = torch.utils.data.DataLoader(train_ds, batch_size=BATCH_SIZE, shuffle=True)
+val_dl = torch.utils.data.DataLoader(val_ds, batch_size=BATCH_SIZE, shuffle=False)
 
 # Create the model and put it on the GPU if available
 myModel = AudioClassifier()
@@ -175,7 +180,7 @@ myModel = myModel.to(device)
 # Check that it is on Cuda
 next(myModel.parameters()).device
 
-num_epochs = 60  # Just for demo, adjust this higher.
+num_epochs = EPOCHS  # Just for demo, adjust this higher.
 training(myModel, train_dl, num_epochs, val_dl)
 print('Done')
 
