@@ -30,8 +30,8 @@ SLICE_OVERLAP = 4
 MAX_FULL_SLICES_PER_CHUNK = 1000
 
 
-def prepare_file(audio_file):
-    sig, sr = torchaudio.load(audio_file)
+def prepare_data(audio_data, sr):
+    sig = torch.tensor(audio_data)
     spec = transforms.MelSpectrogram(
         sr, n_fft=1024, hop_length=None, n_mels=64)(sig)
     spec = transforms.AmplitudeToDB(top_db=80)(spec)
@@ -39,8 +39,8 @@ def prepare_file(audio_file):
     return spec.unsqueeze(0)
 
 
-def get_prediction(audio_file):
-    inputs = prepare_file(audio_file)
+def get_prediction(audio_data, sr):
+    inputs = prepare_data(audio_data, sr)
     
     #inputs_m, inputs_s = inputs.mean(), inputs.std()
     #inputs = (inputs - inputs_m) / inputs_s
@@ -52,8 +52,8 @@ def get_prediction(audio_file):
     return conf.item(), classes.item()
 
 
-def is_burp(audio_file):
-    _, burp = get_prediction(audio_file)
+def is_burp(audio_data, sr):
+    _, burp = get_prediction(audio_data, sr)
     return burp == 0
 
 
@@ -85,7 +85,7 @@ def load_file_chunks(audio_file, sr, size):
     for i in trange(0, int(duration * sr), max_samples + 1, 
                     position=1, unit='chunks', desc='Current file', dynamic_ncols=True, leave=False):
         tqdm.write("Loading next chunk...")
-        data, _ = librosa.load(audio_file, sr=sr, mono=False, offset=i / sr, duration=max_duration)
+        data, _ = librosa.load(audio_file, sr=sr, mono=False, offset=i / sr, duration=max_duration, dtype=np.float32)
         yield data
 
 
@@ -100,20 +100,18 @@ def cut_audio(audio_file, size, sr, output):
             # if current_slice % 500 == 0:
             #     tqdm.write(f"Processing slice {current_slice}...")
             
-            single_slice_file = f'./burp-find-temp/{source}_slice_{current_slice}_from_{int(current_slice * (size // SLICE_OVERLAP) / sr)}.wav'
-            sf.write(single_slice_file, cut.T, sr)
-            
-            if is_burp(single_slice_file):
+            if is_burp(cut, sr):
                 if prev_slice_burp:
                     tqdm.write(f"Burp found!! +++")
                 else:
                     tqdm.write(f"Burp found!! {current_slice}")
                 prev_slice_burp = True
-                shutil.copy(single_slice_file, output)
+                
+                single_slice_file = f'{source}_slice_{current_slice}_from_{int(current_slice * (size // SLICE_OVERLAP) / sr)}.wav'
+                sf.write(os.path.join(output, single_slice_file), cut.T, sr)
             else:
                 prev_slice_burp = False
 
-            os.remove(single_slice_file)
             current_slice += 1
 
 
@@ -127,13 +125,9 @@ cut_size, cut_sr = get_template_size(args.template)
 
 print(f"Template size: {cut_size} samples, at rate {cut_sr}")
 
-if os.path.exists('./burp-find-temp'):
-    shutil.rmtree('./burp-find-temp')
-
 if os.path.exists(args.output):
     shutil.rmtree(args.output)
 
-os.makedirs('./burp-find-temp')
 os.makedirs(args.output)
 
 print(f"\nPrepairing to parse {len(args.files)} files:")
