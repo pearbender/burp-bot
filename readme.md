@@ -54,7 +54,7 @@ You can use the model to find all the burps in an audio clip. It does that by sp
 
 To find the burps, there are several steps:
 
-1. Preparing the audio. Most audio formats are supported, but for the best results use the quality similar to that the training data. If you want to run the detection on vods downloaded with `download_burps.sh` you can use ffmpeg to extract the audio as `flac` with:
+1. Preparing the audio. Most audio formats are supported, but for the best results use the quality similar to that of the training data. If you want to run the detection on vods downloaded with `download_burps.sh` you can use ffmpeg to extract the audio as `flac` with:
     ```
     ffmpeg -i vods/<vod-name>.mkv -q:a 0 -map a <audio-file-name>.flac
     ```
