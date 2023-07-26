@@ -134,13 +134,13 @@ async def run_task(bot: Bot):
         audio = audio_grabber.grab()
         
         if audio is not None:
-            print("grabbed audio")
+            #print("grabbed audio")
             # audio = librosa.resample(audio, orig_sr=16000, target_sr=SR)
             # print("resampled audio") jL%+qU99LH=@5GA
             audio_buffer.add_clip(audio)
-            print("added to buffer")
+            #print("added to buffer")
             file = audio_buffer.save_latest(SR, SIZE)
-            print(f"Processing {file}")
+            #print(f"Processing {file}")
             if file is not None:
                 if evaluator.is_burp_in_file(file):
                     shutil.move(file, DETECTED_BURPS_DIR)
@@ -150,6 +150,12 @@ async def run_task(bot: Bot):
                     floating_window[current_index] = 0
                 
                 current_index = (current_index + 1) % WINDOW_SIZE
+
+                text = ""
+                for i in floating_window:
+                    text += ' ' if i == 0 else '+'
+
+                print(f"[{text}] audio processing {file}")
 
                 if sum(floating_window) >= MIN_IN_WINDOW:
                     if cooldown <= 0:
