@@ -1,14 +1,9 @@
-from torch.utils.data import DataLoader, Dataset, random_split
 import torch
 import torchaudio
 from torchaudio import transforms
 import os
-import random
 import librosa
 import soundfile as sf
-import torch.nn.functional as F
-from torch.nn import init
-from torch import nn
 import numpy as np
 import shutil
 import argparse
@@ -17,49 +12,32 @@ import math
 from tqdm import tqdm
 from tqdm import trange
 
-from model import *
+from model_loader import BurpEvaluator
 
 
-model = AudioClassifier()
-model.load_state_dict(torch.load("./model.pt"))
-model.eval()
-
-
-SLICE_OVERLAP = 4
-
-MAX_FULL_SLICES_PER_CHUNK = 1000
-
-
-def prepare_data(audio_data, sr):
-    sig = torch.tensor(audio_data)
-    spec = transforms.MelSpectrogram(
-        sr, n_fft=1024, hop_length=None, n_mels=64)(sig)
-    spec = transforms.AmplitudeToDB(top_db=80)(spec)
-
-    return spec.unsqueeze(0)
-
-
-def get_prediction(audio_data, sr):
-    inputs = prepare_data(audio_data, sr)
-    
-    #inputs_m, inputs_s = inputs.mean(), inputs.std()
-    #inputs = (inputs - inputs_m) / inputs_s
-    
-    output = model.forward(inputs)
-
-    conf, classes = torch.max(output, 1)
-
-    return conf.item(), classes.item()
-
-
-def is_burp(audio_data, sr):
-    _, burp = get_prediction(audio_data, sr)
-    return burp == 0
+parser = argparse.ArgumentParser("burp-finder")
+parser.add_argument("-t", "--template", help="Template file for length detection", type=str, required=True)
+parser.add_argument("-o", "--output", help="Directory to store the outputs", type=str, default='./burp-found-temp')
+parser.add_argument("-M", "--models", help="Model file[s] to use", type=str, default=['./model.pt'], nargs='+')
+parser.add_argument("files", help="Audio files to parse", type=str, nargs='+')
+args = parser.parse_args()
 
 
 def get_template_size(template_file):
     audio_data, sr = librosa.load(template_file, sr=None, mono=False)
     return audio_data[0].size, sr
+
+
+cut_size, cut_sr = get_template_size(args.template)
+
+model = BurpEvaluator(args.models, sr=cut_sr)
+
+print(f"Template size: {cut_size} samples, at rate {cut_sr}")
+
+
+SLICE_OVERLAP = 4
+
+MAX_FULL_SLICES_PER_CHUNK = 1000
 
 
 def get_cuts(audio, size):
@@ -89,41 +67,31 @@ def load_file_chunks(audio_file, sr, size):
         yield data
 
 
-def cut_audio(audio_file, size, sr, output):
+def cut_audio(audio_file, size, output):
     source, _ = os.path.splitext(os.path.basename(audio_file))
 
     current_slice = 0
     prev_slice_burp = False
 
-    for chunk in load_file_chunks(audio_file, sr, size):
+    for chunk in load_file_chunks(audio_file, model.sr, size):
         for cut in get_cuts(chunk, size):
             # if current_slice % 500 == 0:
             #     tqdm.write(f"Processing slice {current_slice}...")
             
-            if is_burp(cut, sr):
+            if model.evaluate_array(cut):
                 if prev_slice_burp:
                     tqdm.write(f"Burp found!! +++")
                 else:
                     tqdm.write(f"Burp found!! {current_slice}")
                 prev_slice_burp = True
                 
-                single_slice_file = f'{source}_slice_{current_slice}_from_{int(current_slice * (size // SLICE_OVERLAP) / sr)}.wav'
-                sf.write(os.path.join(output, single_slice_file), cut.T, sr)
+                single_slice_file = f'{source}_slice_{current_slice}_from_{int(current_slice * (size // SLICE_OVERLAP) / model.sr)}.wav'
+                sf.write(os.path.join(output, single_slice_file), cut.T, model.sr)
             else:
                 prev_slice_burp = False
 
             current_slice += 1
 
-
-parser = argparse.ArgumentParser("burp-finder")
-parser.add_argument("-t", "--template", help="Template file for length detection", type=str, required=True)
-parser.add_argument("-o", "--output", help="Directory to store the outputs", type=str, default='./burp-found-temp')
-parser.add_argument("files", help="Audio files to parse", type=str, nargs='+')
-args = parser.parse_args()
-
-cut_size, cut_sr = get_template_size(args.template)
-
-print(f"Template size: {cut_size} samples, at rate {cut_sr}")
 
 if os.path.exists(args.output):
     shutil.rmtree(args.output)
@@ -137,6 +105,6 @@ for file in args.files:
 
 for file in tqdm(args.files, unit='files', position=2, desc='Total files', dynamic_ncols=True, leave=False):
     tqdm.write(f"\n========================================\nParsing file {file}")
-    cut_audio(file, cut_size, cut_sr, args.output)
+    cut_audio(file, cut_size, args.output)
 
 print(f"Done")
