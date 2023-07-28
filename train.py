@@ -14,7 +14,7 @@ from model import *
 
 
 BATCH_SIZE = 64 # Tweak appropriately to your VRAM
-EPOCHS = 300
+EPOCHS = 500
 TRAINING_VALIDATION_SPLIT = 0.8
 
 

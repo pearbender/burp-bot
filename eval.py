@@ -13,21 +13,21 @@ from model_loader import BurpEvaluator
 
 
 parser = argparse.ArgumentParser("model-evaluator")
-group = parser.add_mutually_exclusive_group()
-group.add_argument("-m", "--move", help="Move results", action="store_true")
-group.add_argument("-c", "--copy", help="Copy results", action="store_true")
+parser.add_argument("-a", "--action", help="Copy or move the false-positives and false-negatives.", choices=['copy', 'move'])
 parser.add_argument("-M", "--models", help="Model file[s] to use", type=str, default=['./model.pt'], nargs='+')
 parser.add_argument("-p", "--permutate", help="Test all permutation of model combinations", action="store_true")
 parser.add_argument("-s", "--single", help="Use model ensemble mode if many model files provided", action="store_true")
 parser.add_argument("-o", "--output", help="Directory to store the outputs, ignored without -c or -m", type=str, default='./eval-temp')
+parser.add_argument("-T", "--true-data", help="Directory with burp clips", type=str, default='./burps-audio')
+parser.add_argument("-F", "--false-data", help="Directory with non-burp clips", type=str, default='./not-burps-audio')
 args = parser.parse_args()
 
 
-burps_folder_path = "./burps-audio"
+burps_folder_path = args.true_data
 burps_files = [os.path.join(burps_folder_path, file) for file in os.listdir(
     burps_folder_path) if file.lower().endswith(".wav")]
 
-burps_folder_path = "./not-burps-audio"
+burps_folder_path = args.false_data
 not_burps_files = [os.path.join(burps_folder_path, file) for file in os.listdir(
     burps_folder_path) if file.lower().endswith(".wav")]
 
@@ -94,9 +94,9 @@ def single_model_mode(model: BurpEvaluator):
         if not model.evaluate_file(burp):
             false_negatives += 1
             tqdm.write(burp)
-            if args.move:
+            if args.action is not None and args.action == 'move':
                 shutil.move(burp, false_negatives_dir)
-            elif args.copy:
+            elif args.action is not None and args.action == 'copy':
                 shutil.copy(burp, false_negatives_dir)
         else:
             true_positives += 1
@@ -107,9 +107,9 @@ def single_model_mode(model: BurpEvaluator):
         if model.evaluate_file(burp):
             false_positives += 1
             tqdm.write(burp)
-            if args.move:
+            if args.action is not None and args.action == 'move':
                 shutil.move(burp, false_positives_dir)
-            elif args.copy:
+            elif args.action is not None and args.action == 'copy':
                 shutil.copy(burp, false_positives_dir)
         else:
             true_negatives += 1
