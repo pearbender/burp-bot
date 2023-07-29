@@ -42,6 +42,7 @@ class BurpDetector:
     output: bool = False
     verbose: bool = False
     just_burp: bool = False
+    interest_name: str = None
 
 
     def __init__(self, models: "Sequence[str]", slice_size: int, 
@@ -64,10 +65,10 @@ class BurpDetector:
         else:
             self.window_size = window_size
 
-        self.max_total_votes = self.window_size * len(models)
+        self.max_total_votes = 40
 
         if required_votes is None:
-            self.required_votes = math.ceil(self.max_total_votes / 3)
+            self.required_votes = math.ceil(self.max_total_votes / 2)
         else:
             self.required_votes = required_votes
         
@@ -110,7 +111,7 @@ class BurpDetector:
         self.buffer = np.concatenate([self.buffer, sig])
 
 
-    def get_slices(self) -> "Sequence[RawAudio]":
+    def get_slices(self) -> "Sequence[typing.Tuple[RawAudio, int, int]]":
         slices = []
         # last = 3
         # stride = 2
@@ -135,7 +136,9 @@ class BurpDetector:
                        self.buffer.shape[0] - (self.slice_size - 1), 
                        self.slice_stride):
             
-            slices += [self.buffer[i: i + self.slice_size, :]]
+            slices += [(self.buffer[i: i + self.slice_size, :], 
+                        self.buffer_start_sample + i,
+                        self.buffer_start_sample + i + self.slice_size)]
             self.last += self.slice_stride
 
         return slices
@@ -157,15 +160,17 @@ class BurpDetector:
         self.buffer = self.buffer[trim_amount :, :]
 
     
-    def evaluate_slice(self, slice: RawAudio) -> typing.Tuple[int, int]:
-        detections = self.model.evaluate_array(slice.T)
+    def evaluate_slice(self, slice: typing.Tuple[RawAudio, int, int]) -> typing.Tuple[int, int]:
+        audio, start, end = slice
         
-        if detections > 0:
+        probability = self.model.evaluate_array(audio.T)
+        
+        if probability >= 0.5:
             self.save_slice(slice)
         
-        self.floating_window[self.window_index] = detections
+        self.floating_window[self.window_index] = probability
 
-        if sum(self.floating_window) > 0:
+        if sum(self.floating_window) / self.window_size > 0.1:
             self.start_interest()
         else:
             self.stop_interest()
@@ -173,16 +178,10 @@ class BurpDetector:
         text = ""
         for i in range(self.window_size):
             value = self.floating_window[(i + self.window_index + 1) % self.window_size]
-            if len(self.model.models) <= 9:
-                text += ' ' if value == 0 else str(value)
-            else:
-                text += '  |' if value == 0 else f'{value: >2}|'
-
-        if self.max_total_votes > 9:
-            text = text[:-1]
+            text += ' ' if value == 0 else str(min(int(value * 10), 9))
 
         chart = ''
-        amount = sum(self.floating_window)
+        amount = sum(self.floating_window) / self.window_size * self.max_total_votes
         for i in range(self.max_total_votes):
             if i < amount:
                 chart += '='
@@ -193,21 +192,24 @@ class BurpDetector:
 
         date = datetime.utcnow().strftime("%Y-%m-%d-%H:%M:%S")
 
-        if self.output and (self.verbose or sum(self.floating_window) != 0):
-            tqdm.write(f"[{text}]<[{detections: ^3}] |{chart}| {date}")
+        if self.output and (self.verbose or amount >= 1):
+            tqdm.write(f"[{text}]<[{probability: ^5.2f}] |{chart}| "
+                       f"{date}{' |' if self.is_interesting else '  '}{' +++' if amount >= self.required_votes else '    '} "
+                       f"{self.to_ms(start):010_}ms - {self.to_ms(end):010_}ms")
         
         self.window_index = (self.window_index + 1) % self.window_size
 
-        return sum([min(1, x) for x in self.floating_window]), sum(self.floating_window)
+        return sum([min(1, x) for x in self.floating_window]), amount
 
 
-    def save_slice(self, slice: RawAudio) -> None:
+    def save_slice(self, slice: typing.Tuple[RawAudio, int, int]) -> None:
+        audio, start, end = slice
+
         date = datetime.utcnow().strftime("%Y-%m-%d-%H:%M:%S")
-        filename = os.path.join(self.slices_dir, f'{date}_slice_{self.current_clip_number}.wav')
+        prefix = date if self.interest_name is None else self.interest_name
+        filename = os.path.join(self.slices_dir, f'{prefix}_slice_{self.to_ms(start):010_}ms.wav')
 
-        sf.write(filename, slice, self.sr)
-
-        self.current_clip_number += 1
+        sf.write(filename, audio, self.sr)
 
 
     def start_interest(self) -> None:
@@ -228,7 +230,8 @@ class BurpDetector:
         date = datetime.utcnow().strftime("%Y-%m-%d-%H:%M:%S")
         start_ms = self.to_ms(self.interest_started_at)
         end_ms = self.to_ms(self.interest_started_at + self.buffer.shape[0])
-        filename = f'{date}_interest_{start_ms}ms_to_{end_ms}ms_{self.interest_saved_parts}pt_{self.interest_burps_detected}burps.wav'
+        prefix = date if self.interest_name is None else self.interest_name
+        filename = f'{prefix}_interest_{start_ms:010_d}ms_to_{end_ms:010_d}ms_{self.interest_saved_parts}pt_{self.interest_burps_detected}burps.wav'
         filename = os.path.join(self.interest_dir, filename)
         
         if self.interest_started_at == self.buffer_start_sample + self.buffer.shape[0]:

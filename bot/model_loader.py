@@ -35,7 +35,6 @@ class BurpEvaluator:
     models = []
     sr = 44100
 
-
     def __init__(self, model_files, sr=44100) -> None:
         self.models = [load_model(m) for m in model_files]
         self.sr = sr
@@ -43,26 +42,24 @@ class BurpEvaluator:
 
     def _evaluate_with_model(self, model, tensor: torch.Tensor) -> bool:
         output = model.forward(tensor)
-        _, classes = torch.max(output, 1)
-        return classes.item() == 0
-
+        return output.item()
+    
 
     def evaluate_file(self, filename) -> bool:
         tensor = prepare_file(filename)
         return self.evaluate_tensor(tensor)
 
-
+    
     def evaluate_tensor(self, tensor: torch.Tensor) -> bool:
         if len(self.models) == 1:
             return self._evaluate_with_model(self.models[0], tensor)
-
-        burp_votes = 0
-
+        
+        burp_prob = 0
+        
         for model in self.models:
-            if self._evaluate_with_model(model, tensor):
-                burp_votes += 1
-
-        return burp_votes
+            burp_prob += self._evaluate_with_model(model, tensor)
+        
+        return burp_prob / len(self.models)
 
 
     def evaluate_array(self, array: np.ndarray) -> bool:
