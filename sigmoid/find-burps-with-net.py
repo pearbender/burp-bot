@@ -100,6 +100,8 @@ def get_cuts(audio, size):
 
 
 def run_audio(detector: BurpDetector, audio_file, input_size):
+    source, _ = os.path.splitext(os.path.basename(audio_file))
+    detector.interest_name = source
     for chunk in load_file_chunks(audio_file, detector.sr, detector.slice_size):
         for cut in get_cuts(chunk, input_size):
             detection = detector.add_audio_from_array(cut, detector.sr)
@@ -132,13 +134,14 @@ if not args.detector:
 else:
     print(f"\nPrepairing to parse {len(args.files)} files:")
 
-    detector = BurpDetector(args.models, cut_size, cut_size // SLICE_OVERLAP, cut_sr)
-    detector.prepare_dirs()
-    detector.output = True
-
     for file in args.files:
         print(file)
 
     for file in tqdm(args.files, unit='files', position=2, desc='Total files', dynamic_ncols=True, leave=False):
         tqdm.write(f"\n========================================\nParsing file {file}")
+        tqdm.write("Prepairing detector...")
+        detector = BurpDetector(args.models, cut_size, cut_size // SLICE_OVERLAP, cut_sr)
+        detector.prepare_dirs()
+        detector.output = True
+        tqdm.write("Starting")
         run_audio(detector, file, cut_sr)

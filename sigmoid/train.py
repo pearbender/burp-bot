@@ -78,10 +78,10 @@ class SoundDS(Dataset):
     def __getitem__(self, idx):
         if idx < len(self.burps_files):
             audio_file = self.burps_files[idx]
-            class_id = 0
+            class_id = torch.tensor([1.0])
         else:
             audio_file = self.not_burps_files[idx - len(self.burps_files)]
-            class_id = 1
+            class_id = torch.tensor([0.0])
 
         aud = torchaudio.load(audio_file)
         shift_aud = time_shift(aud, 0.4)
@@ -104,10 +104,10 @@ class SoundDSOptimized(Dataset):
     def __getitem__(self, idx):
         if idx < len(self.burps_tensors):
             audio_file = self.burps_tensors[idx]
-            class_id = 0
+            class_id = torch.tensor([1.0])
         else:
             audio_file = self.not_burps_tensors[idx - len(self.burps_tensors)]
-            class_id = 1
+            class_id = torch.tensor([0.0])
 
         shift_aud = time_shift(audio_file, 0.4)
         spec = spectro_gram(shift_aud)
@@ -118,13 +118,21 @@ class SoundDSOptimized(Dataset):
 
 def training(model, train_dl, num_epochs, val_dl):
     # Loss Function, Optimizer and Scheduler
-    criterion = nn.CrossEntropyLoss()
-    optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
-    scheduler = torch.optim.lr_scheduler.OneCycleLR(optimizer, max_lr=0.001,
+    criterion = nn.BCELoss()
+    optimizer = torch.optim.Adam(model.parameters(), lr=0.01)
+    scheduler = torch.optim.lr_scheduler.OneCycleLR(optimizer, max_lr=0.01,
                                                     steps_per_epoch=int(
                                                         len(train_dl)),
                                                     epochs=num_epochs,
                                                     anneal_strategy='linear')
+    # scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, 'min', threshold=1e-3)
+
+    # optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
+    # scheduler = torch.optim.lr_scheduler.OneCycleLR(optimizer, max_lr=0.001,
+    #                                                 steps_per_epoch=int(
+    #                                                     len(train_dl)),
+    #                                                 epochs=num_epochs,
+    #                                                 anneal_strategy='linear')
 
     # Repeat for each epoch
     for epoch in trange(num_epochs, unit='epoch', dynamic_ncols=True, leave=False):
@@ -151,6 +159,7 @@ def training(model, train_dl, num_epochs, val_dl):
 
             # forward + backward + optimize
             outputs = model(inputs)
+
             loss = criterion(outputs, labels)
             loss.backward()
             optimizer.step()
@@ -160,15 +169,15 @@ def training(model, train_dl, num_epochs, val_dl):
             running_loss += loss.item()
 
             # Get the predicted class with the highest score
-            _, prediction = torch.max(outputs, 1)
+            prediction = torch.greater(outputs, 0.5)
             # Count of predictions that matched the target label
             correct_prediction += (prediction == labels).sum().item()
             total_prediction += prediction.shape[0]
 
-            correct_true_prediction += ((prediction == labels) & (prediction == 0)).sum().item()
-            correct_false_prediction += ((prediction == labels) & (prediction == 1)).sum().item()
-            total_true_prediction += (labels == 0).sum().item()
-            total_false_prediction += (labels == 1).sum().item()
+            correct_true_prediction += ((prediction == labels) & (prediction == 1)).sum().item()
+            correct_false_prediction += ((prediction == labels) & (prediction == 0)).sum().item()
+            total_true_prediction += (labels == 1).sum().item()
+            total_false_prediction += (labels == 0).sum().item()
 
             # if i % 10 == 0:    # print every 10 mini-batches
             #    print('[%d, %5d] loss: %.3f' % (epoch + 1, i + 1, running_loss / 10))
@@ -183,11 +192,14 @@ def training(model, train_dl, num_epochs, val_dl):
               f'Loss: {avg_loss:.4f}, '
               f'Accuracy: {acc:.4f} '
               f'[True: {correct_true_prediction}/{total_true_prediction} {acc_true:.4f}, '
-              f'False: {correct_false_prediction}/{total_false_prediction} {acc_false:.4f}]')
+              f'False: {correct_false_prediction}/{total_false_prediction} {acc_false:.4f}] '
+              f'LR: {scheduler.get_last_lr()}')
 
-        if epoch % 5 == 0:
+        if epoch % 10 == 0:
             tqdm.write('Validation')
+            model.eval()
             inference(model, val_dl)
+            model.train()
 
 
     print('Finished Training')
@@ -213,12 +225,12 @@ def inference(model, val_dl):
             outputs = model(inputs)
 
             # Get the predicted class with the highest score
-            _, prediction = torch.max(outputs, 1)
+            prediction = torch.greater(outputs, 0.5)
             # Count of predictions that matched the target label
-            correct_true_prediction += ((prediction == labels) & (prediction == 0)).sum().item()
-            correct_false_prediction += ((prediction == labels) & (prediction == 1)).sum().item()
-            total_true_prediction += (labels == 0).sum().item()
-            total_false_prediction += (labels == 1).sum().item()
+            correct_true_prediction += ((prediction == labels) & (prediction == 1)).sum().item()
+            correct_false_prediction += ((prediction == labels) & (prediction == 0)).sum().item()
+            total_true_prediction += (labels == 1).sum().item()
+            total_false_prediction += (labels == 0).sum().item()
 
     acc = (correct_true_prediction + correct_false_prediction) / (total_true_prediction + total_false_prediction)
     acc_true = correct_true_prediction/total_true_prediction
@@ -229,11 +241,11 @@ def inference(model, val_dl):
           f'Total items: {total_true_prediction + total_false_prediction}')
 
 
-burps_folder_path = "./burps-audio"
+burps_folder_path = "../burps-audio"
 burps_files = [os.path.join(burps_folder_path, file) for file in os.listdir(
     burps_folder_path) if file.lower().endswith(".wav")]
 
-burps_folder_path = "./not-burps-audio"
+burps_folder_path = "../not-burps-audio"
 not_burps_files = [os.path.join(burps_folder_path, file) for file in os.listdir(
     burps_folder_path) if file.lower().endswith(".wav")]
 
@@ -272,6 +284,7 @@ num_epochs = EPOCHS  # Just for demo, adjust this higher.
 training(myModel, train_dl, num_epochs, val_dl)
 print('Done')
 
+myModel.eval()
 # Run inference on trained model with the validation set
 inference(myModel, val_dl)
 

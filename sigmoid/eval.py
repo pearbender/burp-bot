@@ -8,7 +8,6 @@ import itertools
 
 from tqdm import tqdm
 
-from model import *
 from model_loader import BurpEvaluator
 
 
@@ -18,8 +17,8 @@ parser.add_argument("-M", "--models", help="Model file[s] to use", type=str, def
 parser.add_argument("-p", "--permutate", help="Test all permutation of model combinations", action="store_true")
 parser.add_argument("-s", "--single", help="Use model ensemble mode if many model files provided", action="store_true")
 parser.add_argument("-o", "--output", help="Directory to store the outputs, ignored without -c or -m", type=str, default='./eval-temp')
-parser.add_argument("-T", "--true-data", help="Directory with burp clips", type=str, default='./burps-audio')
-parser.add_argument("-F", "--false-data", help="Directory with non-burp clips", type=str, default='./not-burps-audio')
+parser.add_argument("-T", "--true-data", help="Directory with burp clips", type=str, default='../burps-audio')
+parser.add_argument("-F", "--false-data", help="Directory with non-burp clips", type=str, default='../not-burps-audio')
 args = parser.parse_args()
 
 
@@ -39,31 +38,6 @@ def prepare_file(audio_file):
     spec = transforms.AmplitudeToDB(top_db=80)(spec)
 
     return spec.unsqueeze(0)
-
-
-def get_prediction(model, audio_file):
-    inputs = prepare_file(audio_file)
-    output = model.forward(inputs)
-    conf, classes = torch.max(output, 1)
-
-    return conf.item(), classes.item()
-
-
-def get_prediction_tensor(model, tensor):    
-    output = model.forward(tensor)
-    conf, classes = torch.max(output, 1)
-
-    return conf.item(), classes.item()
-
-
-def is_burp(model, audio_file):
-    _, burp = get_prediction(model, audio_file)
-    return burp == 0
-
-
-def is_burp_tensor(model, tensor):
-    _, burp = get_prediction_tensor(model, tensor)
-    return burp == 0
 
 
 def print_stat(message: str, value, total, length=45):
@@ -91,7 +65,7 @@ def single_model_mode(model: BurpEvaluator):
 
     print('finding false-negatives...')
     for burp in tqdm(burps_files, dynamic_ncols=True, leave=False, unit='files'):
-        if not model.evaluate_file(burp):
+        if not model.evaluate_file(burp) >= 0.5:
             false_negatives += 1
             tqdm.write(burp)
             if args.action is not None and args.action == 'move':
@@ -104,7 +78,7 @@ def single_model_mode(model: BurpEvaluator):
 
     print('finding false-positives...')
     for burp in tqdm(not_burps_files, dynamic_ncols=True, leave=False, unit='files'):
-        if model.evaluate_file(burp):
+        if model.evaluate_file(burp) >= 0.5:
             false_positives += 1
             tqdm.write(burp)
             if args.action is not None and args.action == 'move':
@@ -320,7 +294,8 @@ def main():
     if len(args.models) == 1 or args.single:
         single_model_mode(BurpEvaluator(args.models))
     else:
-        multi_model_mode(args.models)
+        #multi_model_mode(args.models)
+        pass
 
 
 if __name__ == "__main__":

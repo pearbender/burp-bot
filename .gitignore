@@ -1,6 +1,8 @@
 .vscode
 __pycache__
 burps/*
+oldburps
+temp-rt-clips
 burps-audio/*
 not-burps/*
 not-burps-audio/*
@@ -15,3 +17,6 @@ eval-temp
 *.flac
 *.mkv
 blacklist.txt
+interesting
+detected_slices
+models/*
