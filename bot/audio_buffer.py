@@ -3,6 +3,7 @@ import os
 import shutil
 import librosa
 import soundfile as sf
+from datetime import datetime
 
 
 TEMP_SLICE_DIR = './temp-rt-clips'
@@ -36,7 +37,8 @@ class AudioBuffer:
             print("Not enough audio in buffer yet")
             return None 
 
-        filename = os.path.join(TEMP_SLICE_DIR, f'slice_{self.current_clip_number}.wav')
+        date = datetime.utcnow().strftime("%Y-%m-%d-%H:%M:%S")
+        filename = os.path.join(TEMP_SLICE_DIR, f'{date}_slice_{self.current_clip_number}.wav')
 
         sf.write(filename, self.buffer[-samples:], sr)
 

@@ -6,7 +6,7 @@ from twitchrealtimehandler import TwitchAudioGrabber
 import numpy as np
 import librosa
 
-from evaluator import *
+from burp_detector import BurpDetector
 from audio_buffer import *
 
 
@@ -14,6 +14,8 @@ CONFIG_FILE = './twitch-auth.yaml'
 MODEL_DIR = './models'
 TEMPLATE_FILE = './template.wav'
 DETECTED_BURPS_DIR = './burps'
+
+SLICE_OVERLAP = 8
 
 AUDIO_SECTION_LENGTH = 1
 WINDOW_SIZE = 4
@@ -52,16 +54,18 @@ class Bot(commands.Bot):
     def __init__(self):
         super().__init__(token=CONFIG['token'], prefix='?', initial_channels=['perokichi_neet'])
 
+
     async def event_ready(self):
         print(f'Logged in as | {self.nick}')
         print(f'User id is | {self.user_id}')
+        await(self.start_counter())
         
 
     async def event_message(self, message):
         if message.echo:
             return
         
-        print(message.content)
+        #print(message.content)
         await self.handle_commands(message)
 
 
@@ -81,12 +85,18 @@ class Bot(commands.Bot):
         if self.periodic_task != None:
             await ctx.send(f'[bot] already running')
             return
-        
-        # TODO(laxader): Move the listener starting to bot connection event
-        # maybe add some sort of a stream start/stop detection
 
-        self.periodic_task = asyncio.create_task(run_task(self))
+        self.periodic_task = self.loop.create_task(run_task(self))
         await ctx.send(f'[bot] started burp counter')
+
+
+    async def start_counter(self):
+        if self.periodic_task != None:
+            print(f'[bot] already running')
+            return
+
+        self.periodic_task = self.loop.create_task(run_task(self))
+        print(f'[bot] started burp counter')
 
 
     @commands.command()
@@ -104,60 +114,44 @@ class Bot(commands.Bot):
 
 
 async def run_task(bot: Bot):
-    print("Creating grabber")
+    try:
+        print("Creating grabber")
 
-    audio_grabber = TwitchAudioGrabber(
-        twitch_url="https://www.twitch.tv/perokichi_neet",
-        blocking=False,  # wait until a segment is available
-        segment_length=AUDIO_SECTION_LENGTH,  # segment length in seconds
-        rate=SR,  # sampling rate of the audio
-        channels=2,  # number of channels
-        dtype=np.float32  # quality of the audio could be [np.int16, np.int32, np.float32, np.float64]
-        )
+        audio_grabber = TwitchAudioGrabber(
+            twitch_url="https://www.twitch.tv/perokichi_neet",
+            blocking=False,  # wait until a segment is available
+            segment_length=AUDIO_SECTION_LENGTH,  # segment length in seconds
+            rate=SR,  # sampling rate of the audio
+            channels=2,  # number of channels
+            dtype=np.float32  # quality of the audio could be [np.int16, np.int32, np.float32, np.float64]
+            )
 
-    audio_buffer = AudioBuffer(8 * 44100)
-    evaluator = MultiModelEvaluator(find_models())
+        detector = BurpDetector(find_models(), slice_size=SIZE, slice_stride=SIZE // SLICE_OVERLAP, sample_rate=SR)
+        detector.prepare_dirs()
+        detector.verbose = True
+        detector.output = True
 
-    floating_window = [0 for x in range(WINDOW_SIZE)]
-    current_index = 0
-    cooldown = 0
+        cooldown = 0
 
-    print("Starting loop")
+        print("Starting loop")
 
-    while True:
-        if len(bot.connected_channels) <= 0:
-            print("No channels connected")
-            break;
-        
-        channel = bot.connected_channels[0]
+        while True:
+            if len(bot.connected_channels) <= 0:
+                print("No channels connected")
+                break;
+            
+            channel = bot.connected_channels[0]
 
-        audio = audio_grabber.grab()
-        
-        if audio is not None:
-            #print("grabbed audio")
-            # audio = librosa.resample(audio, orig_sr=16000, target_sr=SR)
-            # print("resampled audio") jL%+qU99LH=@5GA
-            audio_buffer.add_clip(audio)
-            #print("added to buffer")
-            file = audio_buffer.save_latest(SR, SIZE)
-            #print(f"Processing {file}")
-            if file is not None:
-                if evaluator.is_burp_in_file(file):
-                    shutil.move(file, DETECTED_BURPS_DIR)
-                    floating_window[current_index] = 1
-                else:
-                    os.remove(file)
-                    floating_window[current_index] = 0
+            audio = audio_grabber.grab()
+            
+            if audio is not None:
+
+                detection = detector.add_audio_from_array(audio, SR)
+
+                if detection is None:
+                    continue
                 
-                current_index = (current_index + 1) % WINDOW_SIZE
-
-                text = ""
-                for i in floating_window:
-                    text += ' ' if i == 0 else '+'
-
-                print(f"[{text}] audio processing {file}")
-
-                if sum(floating_window) >= MIN_IN_WINDOW:
+                if detection > 0:
                     if cooldown <= 0:
                         print("BURP DETECTED!!!!!")
                         cooldown = BURP_COOLDOWN
@@ -166,12 +160,14 @@ async def run_task(bot: Bot):
                         await channel.send("!burrp")
                     else:
                         cooldown = BURP_COOLDOWN
-        #else:
-            #print("No audio awailable")
 
-        if cooldown > 0:
-            cooldown -= 0.25
-        await asyncio.sleep(0.25)
+            if cooldown > 0:
+                cooldown -= 0.25
+            await asyncio.sleep(0.25)
+
+    finally:
+        print("Stopping audio")
+        audio_grabber.terminate()
 
 
 bot = Bot()
